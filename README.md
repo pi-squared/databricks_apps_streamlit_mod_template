@@ -8,6 +8,8 @@ developed by Databricks MVP - Maksim Pachkouski:
 
 # Databricks Apps — Streamlit Modular Template
 
+[Article with description](https://medium.com/towards-data-engineering/databricks-apps-tutorial-scalable-streamlit-modular-template-for-production-83af8143520a)
+
 A starter template for building modular Streamlit applications, deployable as a [Databricks App](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html).
 
 It splits a Streamlit project into a tiny, flat structure instead of one large `app.py`:
