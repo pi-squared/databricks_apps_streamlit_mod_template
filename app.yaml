@@ -1,7 +1,6 @@
 command: [
-  "streamlit",
-  "run",
-  "app.py"
+  "python",
+  "run.py"
 ]
 
 env:

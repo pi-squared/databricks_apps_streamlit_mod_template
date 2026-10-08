@@ -20,6 +20,49 @@ It splits a Streamlit project into a tiny, flat structure instead of one large `
 
 Use this as a clean starting point and add your own pages.
 
+## Run this fork directly from Git
+
+This fork includes **all 42 Python runtime packages** in `vendor/wheels/`, including
+Streamlit's frontend assets and the native NumPy, pandas, Pillow, and PyArrow
+libraries. They are ordinary Git files, so a normal clone includes them without
+Git LFS, submodules, package registries, or an installation step.
+
+The bundle targets **CPython 3.11 on Linux x86-64 with glibc 2.28 or newer**
+(including Ubuntu 22.04 and the default Databricks Apps runtime). Python and the
+operating system must already be present. These native wheels are specific to
+that runtime; Windows, macOS, ARM, Alpine Linux, and other Python versions need a
+different bundle.
+
+```bash
+git clone https://github.com/pi-squared/databricks_apps_streamlit_mod_template.git
+cd databricks_apps_streamlit_mod_template
+python3.11 run.py
+```
+
+Open `http://localhost:8501`. Use `python3.11 run.py --server.port 9000` to change
+the local port. On Databricks, `app.yaml` runs the same launcher with the platform's
+`DATABRICKS_APP_PORT` and host configuration.
+
+The launcher verifies every wheel's SHA-256 and unpacks a temporary cache on first
+use. Later launches reuse that cache. It runs isolated Python, so dependencies
+come from this checkout even if other versions are installed. It never invokes
+pip, uv, or a download command. An empty, `--no-index` `requirements.txt` also
+prevents Databricks' dependency build step from fetching packages.
+
+Verify the dependency closure and native imports without starting the server:
+
+```bash
+python3.11 run.py --check
+python3.11 -I -S tests/offline_smoke.py
+python3.11 -I -S tests/offline_http_smoke.py
+```
+
+The package inventory, versions, hashes, and license paths are recorded in
+`vendor/manifest.json`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The bundle is about 109 MiB compressed and needs roughly 400 MiB of temporary
+disk space when unpacked. Dependency downloads are unnecessary at runtime;
+links and external badge images in this README still require internet access.
+
 ---
 
 ## Project structure
@@ -27,7 +70,13 @@ Use this as a clean starting point and add your own pages.
 ```
 app.py                  # st.set_page_config + st.navigation
 app.yaml                # Databricks App run command
-requirements.txt
+run.py                  # Isolated, offline launcher
+requirements.txt        # Empty dependency list; prohibits registry access
+requirements.in         # Direct dependencies for maintainers
+requirements.lock       # Full closure with hashes; optional offline pip input
+vendor/
+  manifest.json         # Package inventory and SHA-256 checksums
+  wheels/               # Complete, checked-in dependency archives
 pages/
   home.py               # Renders this README
   example.py            # Hello-world page split into 2 tabs
@@ -78,19 +127,38 @@ If two pages need the same loader or widget, extract it. The simplest path: a si
 
 ## Local development
 
-1. Create a virtual environment and install dependencies:
+1. Run the app with the bundled dependencies:
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
+   python3.11 run.py
    ```
 
 2. (Optional) Create a `.env` file for any secrets your app needs. `python-dotenv` is loaded by `app.py`, so anything in `.env` becomes available via `os.environ`.
 
-3. Run the app:
-   ```bash
-   streamlit run app.py
-   ```
+Edit `app.py` or a page and let Streamlit reload it. There is no virtual environment
+or dependency installation required. Keep `.env` and secrets out of Git.
+
+### Updating the bundle (maintainers only)
+
+Keep the original direct requirements in `requirements.in`. For the current exact
+versions, download the hash-locked wheels into a new, empty directory on Linux
+x86-64 with Python 3.11 and glibc 2.28 or newer:
+
+```bash
+python3.11 -m pip download --no-index --find-links vendor/wheels \
+  --only-binary=:all: --dest /tmp/template-wheels -r requirements.lock
+```
+
+That command reproduces the existing bundle entirely offline. To update versions,
+resolve `requirements.in` with pip's `--only-binary=:all:` option and compatible
+manylinux platform tags into an empty directory using PyPI, replace the wheel set,
+then regenerate its inventory and rerun both checks above:
+
+```bash
+python3.11 scripts/describe_bundle.py
+```
+
+The generator does not download anything. Commit the wheels, inventory, lock,
+and notices together when changing dependencies.
 
 ---
 
@@ -112,7 +180,7 @@ Your administrator must enable Git-backed deployments in the Databricks workspac
 2. Click the **Create app** button in the top right corner.
 3. In the creation dialog, select **Git repository** as the source.
 4. Fill in the repository details:
-   - **Git repo URL:** Enter the full URL of your GitHub repository.
+   - **Git repo URL:** `https://github.com/pi-squared/databricks_apps_streamlit_mod_template.git`
    - **Git provider:** Select **GitHub**.
 5. Click **Create**.
 6. Click **Deploy** with settings:
